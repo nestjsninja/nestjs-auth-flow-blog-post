@@ -1,15 +1,11 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { Users } from './users.entity';
-import { Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
+import { UserRepository } from './user.repository';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-    constructor(
-        @InjectRepository(Users)
-        private readonly userRepository: Repository<Users>,
-    ) {}
+    constructor(private readonly userRepository: UserRepository) {}
 
     private async comparePasswords(
         userPassword: string,
@@ -18,18 +14,14 @@ export class UsersService {
         return await bcrypt.compare(currentPassword, userPassword);
     }
 
-    async findOneByUsername(username: string): Promise<Users | undefined> {
-        return this.userRepository.findOne({ where: { username } });
-    }
-
     async validateCredentials({
         username,
         password,
     }: {
         username: string;
         password: string;
-    }): Promise<Users> {
-        const user = await this.findOneByUsername(username);
+    }): Promise<User> {
+        const user = await this.userRepository.findOne({ username });
 
         if (!user) {
             throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
@@ -53,8 +45,8 @@ export class UsersService {
     }: {
         username: string;
         password: string;
-    }): Promise<Users> {
-        const userInDb = await this.findOneByUsername(username);
+    }): Promise<User> {
+        const userInDb = await this.userRepository.findOne({ username });
         if (userInDb) {
             throw new HttpException(
                 'User already exists',
@@ -62,12 +54,12 @@ export class UsersService {
             );
         }
 
-        const user: Users = this.userRepository.create({
-            username,
-            password,
-        });
+        const passwordHashed = await bcrypt.hash(password, 10);
 
-        await this.userRepository.save(user);
+        const user: User = this.userRepository.create({
+            username,
+            password: passwordHashed,
+        });
 
         return user;
     }
